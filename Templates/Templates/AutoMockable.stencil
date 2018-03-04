@@ -147,7 +147,8 @@ func verify<ObjectType: Verifyable>(_ verifyObject: ObjectType) -> ObjectType.Ve
 {% macro mockedVariableName variable %}{{ variable.name }}{% endmacro %}
 
 {% for type in types.protocols where type.based.AutoMockable or type|annotated:"AutoMockable" %}{% if type.name != "AutoMockable" %}
-class {{ type.name }}Mock: {{ type.name }} {
+class {{ type.name }}Mock: {{ type.name }}, Verifyable {
+    typealias VerifyMock = Verify{{ type.name }}Mock
 {% for variable in type.allVariables|!definedInExtension %}
     {% if variable.isOptional %}{% call mockOptionalVariable variable %}{% elif variable.isArray or variable.isDictionary %}{% call mockNonOptionalArrayOrDictionaryVariable variable %}{% else %}{% call mockNonOptionalVariable variable %}{% endif %}
 {% endfor %}
@@ -156,4 +157,14 @@ class {{ type.name }}Mock: {{ type.name }} {
     {% call mockMethod method %}
 {% endfor %}
 }
+
+class Verify{{ type.name }}Mock: MockInitable {
+    typealias MockType = {{ type.name }}Mock
+    private let verifyObject: {{ type.name }}Mock
+
+    required init(verifyObject: {{ type.name }}Mock) {
+        self.verifyObject = verifyObject
+    }
+}
+
 {% endif %}{% endfor %}

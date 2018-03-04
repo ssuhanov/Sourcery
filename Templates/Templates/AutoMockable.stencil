@@ -3,10 +3,42 @@
 
 import Foundation
 #if os(iOS) || os(tvOS) || os(watchOS)
+import XCTest
 import UIKit
 #elseif os(OSX)
 import AppKit
 #endif
+
+public func XCTAssertFalse(_ expression: Bool?, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
+    if let expression = expression {
+        XCTAssertFalse(expression, message, file: file, line: line)
+    } else {
+        XCTFail(message, file: file, line: line)
+    }
+}
+
+public func XCTAssertTrue(_ expression: Bool?, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
+    if let expression = expression {
+        XCTAssertTrue(expression, message, file: file, line: line)
+    } else {
+        XCTFail(message, file: file, line: line)
+    }
+}
+
+public func XCTAssertEqual(_ expression1: Any?, _ expression2: Any?, _ message: String = "", file: StaticString = #file, line: UInt = #line) {
+    switch (expression1, expression2) {
+    case (let expression1 as AnyHashable, let expression2 as AnyHashable):
+        XCTAssertEqual(expression1, expression2, message, file: file, line: line)
+    case (let expression1 as [AnyHashable], let expression2 as [AnyHashable]):
+        XCTAssertEqual(expression1, expression2, message, file: file, line: line)
+    case (let expression1 as [AnyHashable: AnyHashable], let expression2 as [AnyHashable: AnyHashable]):
+        XCTAssertEqual(expression1, expression2, message, file: file, line: line)
+    case (nil, nil):
+        break
+    default:
+        XCTFail(message, file: file, line: line)
+    }
+}
 
 {% macro swiftifyMethodName name %}{{ name | replace:"(","_" | replace:")","" | replace:":","_" | replace:"`","" | snakeToCamelCase | lowerFirstWord }}{% endmacro %}
 

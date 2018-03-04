@@ -40,6 +40,19 @@ public func XCTAssertEqual(_ expression1: Any?, _ expression2: Any?, _ message: 
     }
 }
 
+protocol MockInitable {
+    associatedtype MockType where MockType: Verifyable
+    init(verifyObject: MockType)
+}
+
+protocol Verifyable {
+    associatedtype VerifyMock: MockInitable
+}
+
+func verify<ObjectType: Verifyable>(_ verifyObject: ObjectType) -> ObjectType.VerifyMock where ObjectType.VerifyMock.MockType == ObjectType {
+    return ObjectType.VerifyMock.init(verifyObject: verifyObject)
+}
+
 {% macro swiftifyMethodName name %}{{ name | replace:"(","_" | replace:")","" | replace:":","_" | replace:"`","" | snakeToCamelCase | lowerFirstWord }}{% endmacro %}
 
 {% macro methodThrowableErrorDeclaration method %}

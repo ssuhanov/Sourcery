@@ -238,8 +238,10 @@ func when<ObjectType: Behaviorable>(_ object: ObjectType) -> ObjectType.Behavior
 {% macro mockedVariableName variable %}{{ variable.name }}{% endmacro %}
 
 {% for type in types.protocols where type.based.AutoMockable or type|annotated:"AutoMockable" %}{% if type.name != "AutoMockable" %}
-class {{ type.name }}Mock: {{ type.name }}, Verifyable {
+// MARK: - {{ type.name }}Mock
+class {{ type.name }}Mock: {{ type.name }}, Verifyable, Behaviorable {
     typealias VerifyMock = Verify{{ type.name }}Mock
+    typealias BehaviorMock = Behavior{{ type.name }}Mock
 {% for variable in type.allVariables|!definedInExtension %}
     {% if variable.isOptional %}{% call mockOptionalVariable variable %}{% elif variable.isArray or variable.isDictionary %}{% call mockNonOptionalArrayOrDictionaryVariable variable %}{% else %}{% call mockNonOptionalVariable variable %}{% endif %}
 {% endfor %}
@@ -260,6 +262,15 @@ class Verify{{ type.name }}Mock: MockInitable {
         {% call mockMethodVerifyable method %}
     {% endfor %}
 
+}
+
+class Behavior{{ type.name }}Mock: MockInitable {
+    typealias MockType = {{ type.name }}Mock
+    private let object: {{ type.name }}Mock
+
+    required init(object: {{ type.name }}Mock) {
+        self.object = object
+    }
 }
 
 {% endif %}{% endfor %}

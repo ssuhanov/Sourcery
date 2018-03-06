@@ -216,6 +216,31 @@ func when<ObjectType: Behaviorable>(_ object: ObjectType) -> ObjectType.Behavior
         {% endif %}{% endif %}
     }
 {% endmacro %}
+{% macro mockMethodBehaviorable method %}
+
+    // MARK: {{ method.shortName }}
+    func {% call swiftifyMethodName method.selectorName %}() -> Behaviour{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
+        return Behaviour{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %}(object: self.object)
+    }
+
+    class Behaviour{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
+        private let object: {{ type.name }}Mock
+
+        init(object: {{ type.name }}Mock) {
+            self.object = object
+        }
+
+        func then(_ completion: @escaping ({% for param in method.parameters %}{{ param.typeName }}{% if not forloop.last %}, {% endif %}{% endfor %}) {% if method.throws %}throws {% endif %}-> {% if method.isInitializer %}Void{% else %}{{ method.returnTypeName }}{% endif %}) {
+            self.object.{% call methodClosureName method %} = completion
+        }
+
+        {% if not method.returnTypeName.isVoid and not method.isInitializer %}
+        func thenReturn(_ value: {{ method.returnTypeName }}) {
+          self.object.{% call swiftifyMethodName method.selectorName %}ReturnValue = value
+        }
+        {% endif %}
+    }
+{% endmacro %}
 
 
 {% macro mockOptionalVariable variable %}
@@ -271,6 +296,10 @@ class Behavior{{ type.name }}Mock: MockInitable {
     required init(object: {{ type.name }}Mock) {
         self.object = object
     }
+    {% for method in type.allMethods|!definedInExtension %}
+        {% call mockMethodBehaviorable method %}
+    {% endfor %}
+
 }
 
 {% endif %}{% endfor %}

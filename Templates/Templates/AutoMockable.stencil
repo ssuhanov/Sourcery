@@ -182,6 +182,18 @@ func when<ObjectType: Behaviorable>(_ object: ObjectType) -> ObjectType.Behavior
             return self
         }
 
+        @discardableResult
+        func {{ param.name }}IsNil(file: StaticString = #file, line: UInt = #line) -> Verify{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
+            XCTAssertNil(self.object.{% call swiftifyMethodName method.selectorName %}Received{{ param.name|upperFirstLetter }}, "{{ param.name }} should be nil")
+            return self
+        }
+
+        @discardableResult
+        func {{ param.name }}IsNotNil(file: StaticString = #file, line: UInt = #line) -> Verify{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
+            XCTAssertNotNil(self.object.{% call swiftifyMethodName method.selectorName %}Received{{ param.name|upperFirstLetter }}, "{{ param.name }} should not be nil")
+            return self
+        }
+
         {% if param.type.kind == "class" or param.type.kind == "protocol" %}
         @discardableResult
         func {{ param.name }}(identicalTo {{ param.name }}: {% if param.typeAttributes.escaping %}{{ param.unwrappedTypeName }}{% else %}{{ param.typeName }}{% endif %}, file: StaticString = #file, line: UInt = #line) -> Verify{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
@@ -202,6 +214,18 @@ func when<ObjectType: Behaviorable>(_ object: ObjectType) -> ObjectType.Behavior
         @discardableResult
         func {{ param.name }}<T>(is type: T.Type, file: StaticString = #file, line: UInt = #line) -> Verify{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
             XCTAssertTrue(self.object.{% call swiftifyMethodName method.selectorName %}ReceivedArguments?.{{ param.name }} is T, "{{ param.name }} should be of \(T.self) type")
+            return self
+        }
+
+        @discardableResult
+        func {{ param.name }}IsNil(file: StaticString = #file, line: UInt = #line) -> Verify{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
+            XCTAssertNil(self.object.{% call swiftifyMethodName method.selectorName %}ReceivedArguments?.{{ param.name }}, "{{ param.name }} should be nil")
+            return self
+        }
+
+        @discardableResult
+        func {{ param.name }}IsNotNil(file: StaticString = #file, line: UInt = #line) -> Verify{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
+            XCTAssertNotNil(self.object.{% call swiftifyMethodName method.selectorName %}ReceivedArguments?.{{ param.name }}, "{{ param.name }} should not be nil")
             return self
         }
 

@@ -194,6 +194,12 @@ func when<ObjectType: Behaviorable>(_ object: ObjectType) -> ObjectType.Behavior
             return self
         }
 
+        @discardableResult
+        func {{ param.name }}(apply completion: ({% if param.isClosure %}({% endif %}{{ param.typeName.unwrappedTypeName }}{% if param.isClosure %}){% endif %}?) -> Void, file: StaticString = #file, line: UInt = #line) -> Verify{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
+            completion(self.object.{% call swiftifyMethodName method.selectorName %}Received{{ param.name|upperFirstLetter }})
+            return self
+        }
+
         {% if param.type.kind == "class" or param.type.kind == "protocol" %}
         @discardableResult
         func {{ param.name }}(identicalTo {{ param.name }}: {% if param.typeAttributes.escaping %}{{ param.unwrappedTypeName }}{% else %}{{ param.typeName }}{% endif %}, file: StaticString = #file, line: UInt = #line) -> Verify{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
@@ -226,6 +232,12 @@ func when<ObjectType: Behaviorable>(_ object: ObjectType) -> ObjectType.Behavior
         @discardableResult
         func {{ param.name }}IsNotNil(file: StaticString = #file, line: UInt = #line) -> Verify{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
             XCTAssertNotNil(self.object.{% call swiftifyMethodName method.selectorName %}ReceivedArguments?.{{ param.name }}, "{{ param.name }} should not be nil")
+            return self
+        }
+
+        @discardableResult
+        func {{ param.name }}(apply completion: ({% if param.isClosure %}({% endif %}{{ param.typeName.unwrappedTypeName }}{% if param.isClosure %}){% endif %}?) -> Void, file: StaticString = #file, line: UInt = #line) -> Verify{{ type.name }}Mock{% call swiftifyMethodNameVerifyable method.selectorName %} {
+            completion(self.object.{% call swiftifyMethodName method.selectorName %}ReceivedArguments?.{{ param.name }})
             return self
         }
 

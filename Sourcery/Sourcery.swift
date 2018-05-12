@@ -28,6 +28,7 @@ class Sourcery {
     fileprivate let watcherEnabled: Bool
     fileprivate let arguments: [String: NSObject]
     fileprivate let cacheDisabled: Bool
+    fileprivate let cacheBasePath: Path?
     fileprivate let prune: Bool
 
     fileprivate var status = ""
@@ -38,11 +39,12 @@ class Sourcery {
     ///
     /// - Parameter verbose: Whether to turn on verbose logs.
     /// - Parameter arguments: Additional arguments to pass to templates.
-    init(verbose: Bool = false, watcherEnabled: Bool = false, cacheDisabled: Bool = false, prune: Bool = false, arguments: [String: NSObject] = [:]) {
+    init(verbose: Bool = false, watcherEnabled: Bool = false, cacheDisabled: Bool = false, cacheBasePath: Path? = nil, prune: Bool = false, arguments: [String: NSObject] = [:]) {
         self.verbose = verbose
         self.arguments = arguments
         self.watcherEnabled = watcherEnabled
         self.cacheDisabled = cacheDisabled
+        self.cacheBasePath = cacheBasePath
         self.prune = prune
     }
 
@@ -107,7 +109,7 @@ class Sourcery {
             return FolderWatcher.Local(path: watchPath.string) { events in
                 let eventPaths: [Path] = events
                     .filter { $0.flags.contains(.isFile) }
-                    .flatMap {
+                    .compactMap {
                         let path = Path($0.path)
                         return path.isSwiftSourceFile ? path : nil
                     }
@@ -181,24 +183,36 @@ class Sourcery {
         return top.map { $0.0 }
     }
 
+    /// This function should be used to retrieve the path to the cache instead of `Path.cachesDir`,
+    /// as it considers the `--cacheDisabled` and `--cacheBasePath` command line parameters.
+    fileprivate func cachesDir(sourcePath: Path, createIfMissing: Bool = true) -> Path? {
+        return cacheDisabled
+            ? nil
+            : Path.cachesDir(sourcePath: sourcePath, basePath: cacheBasePath, createIfMissing: createIfMissing)
+    }
+
     /// Remove the existing cache artifacts if it exists.
+    /// Currently this is only called from tests, and the `--cacheDisabled` and `--cacheBasePath` command line parameters are not considered.
     ///
     /// - Parameter sources: paths of the sources you want to delete the
-    static func removeCache(for sources: [Path]) {
+    static func removeCache(for sources: [Path], cacheDisabled: Bool = false, cacheBasePath: Path? = nil) {
+        if cacheDisabled {
+            return
+        }
         sources.forEach { path in
-            let cacheDir = Path.cachesDir(sourcePath: path, createIfMissing: false)
+            let cacheDir = Path.cachesDir(sourcePath: path, basePath: cacheBasePath, createIfMissing: false)
             _ = try? cacheDir.delete()
         }
     }
 
     fileprivate func templates(from: Paths) throws -> [Template] {
-        return try templatePaths(from: from).flatMap {
+        return try templatePaths(from: from).compactMap {
             if $0.extension == "swifttemplate" {
                 #if SWIFT_PACKAGE
                     Log.warning("Skipping template \($0). Swift templates are not supported when using Sourcery built with Swift Package Manager yet. Please use only Stencil or EJS templates. See https://github.com/krzysztofzablocki/Sourcery/issues/244 for details.")
                     return nil
                 #else
-                    let cachePath = cacheDisabled ? nil : Path.cachesDir(sourcePath: $0)
+                    let cachePath = cachesDir(sourcePath: $0)
                     return try SwiftTemplate(path: $0, cachePath: cachePath)
                 #endif
             } else if $0.extension == "ejs" {
@@ -241,10 +255,10 @@ extension Sourcery {
                 .filter {
                     let exclude = exclude
                         .map { $0.isDirectory ? try? $0.recursiveChildren() : [$0] }
-                        .flatMap({ $0 }).flatMap({ $0 })
+                        .compactMap({ $0 }).flatMap({ $0 })
                     return !exclude.contains($0)
                 }
-                .flatMap { (path: Path) -> (path: Path, contents: String)? in
+                .compactMap { (path: Path) -> (path: Path, contents: String)? in
                     do {
                         return (path: path, contents: try path.read(.utf8))
                     } catch {
@@ -270,7 +284,7 @@ extension Sourcery {
             var accumulator = 0
             let step = sources.count / 10 // every 10%
 
-            let results = sources.parallelMap({ self.loadOrParse(parser: $0, cachesPath: Path.cachesDir(sourcePath: from)) }, progress: !(verbose || watcherEnabled) ? nil : { _ in
+            let results = try sources.parallelMap({ try self.loadOrParse(parser: $0, cachesPath: cachesDir(sourcePath: from)) }, progress: !(verbose || watcherEnabled) ? nil : { _ in
                 if accumulator > previousUpdate + step {
                     previousUpdate = accumulator
                     let percentage = accumulator * 100 / sources.count
@@ -298,21 +312,21 @@ extension Sourcery {
         return (Types(types: types), inlineRanges)
     }
 
-    private func loadOrParse(parser: FileParser, cachesPath: @autoclosure () -> Path) -> FileParserResult {
+    private func loadOrParse(parser: FileParser, cachesPath: @autoclosure () -> Path?) throws -> FileParserResult {
         guard let pathString = parser.path else { fatalError("Unable to retrieve \(String(describing: parser.path))") }
 
-        if cacheDisabled {
-            return parser.parse()
+        guard let cachesPath = cachesPath() else {
+            return try parser.parse()
         }
 
         let path = Path(pathString)
-        let artifacts = cachesPath() + "\(pathString.hash).srf"
+        let artifacts = cachesPath + "\(pathString.hash).srf"
 
         guard artifacts.exists,
               let contentSha = parser.initialContents.sha256(),
               let unarchived = load(artifacts: artifacts.string, contentSha: contentSha) else {
 
-            let result = parser.parse()
+            let result = try parser.parse()
 
             let data = NSKeyedArchiver.archivedData(withRootObject: result)
             do {
@@ -352,7 +366,7 @@ extension Sourcery {
         Log.info("Generating code...")
         status = ""
 
-        if output.path.isDirectory {
+        if output.isDirectory {
             try allTemplates.forEach { template in
                 let result = try generate(template, forParsingResult: parsingResult, outputPath: output.path)
                 let outputPath = output.path + generatedPath(for: template.sourcePath)
@@ -446,7 +460,7 @@ extension Sourcery {
 
         try inline.annotatedRanges
             .map { (key: $0, range: $1) }
-            .flatMap { (key, range) -> MappedInlineAnnotations? in
+            .compactMap { (key, range) -> MappedInlineAnnotations? in
                 let generatedBody = contents.bridge().substring(with: range)
 
                 guard let (filePath, ranges) = parsingResult.inlineRanges.first(where: { $0.ranges[key] != nil }) else {

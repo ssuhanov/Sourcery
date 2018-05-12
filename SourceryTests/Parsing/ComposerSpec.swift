@@ -12,7 +12,7 @@ import SourceKittenFramework
 @testable import SourceryRuntime
 
 private func build(_ source: String) -> [String: SourceKitRepresentable]? {
-    return Structure(file: File(contents: source)).dictionary
+    return try? Structure(file: File(contents: source)).dictionary
 }
 
 class ParserComposerSpec: QuickSpec {
@@ -340,7 +340,7 @@ class ParserComposerSpec: QuickSpec {
 
                 context("given generic dictionary type") {
                     it("extracts key type properly") {
-                        let types = parse("struct Foo { var dictionary: Dictionary<Int, String>; var dictionaryOfArrays: Dictionary<[Int], [String]>; var dictonaryOfDictionaries: Dictionary<Int, [Int: String]>; var dictionaryOfTuples: Dictionary<Int, (String, String)>; var dictionaryOfClojures: Dictionary<Int, ()->()> }")
+                        let types = parse("struct Foo { var dictionary: Dictionary<Int, String>; var dictionaryOfArrays: Dictionary<[Int], [String]>; var dictonaryOfDictionaries: Dictionary<Int, [Int: String]>; var dictionaryOfTuples: Dictionary<Int, (String, String)>; var dictionaryOfClojures = Dictionary<Int, ()->()>() }")
                         let variables = types.first?.variables
 
                         expect(variables?[0].typeName.dictionary).to(equal(
@@ -847,7 +847,7 @@ class ParserComposerSpec: QuickSpec {
                     }
 
                     it("extracts property of nested type properly") {
-                        let expectedVariable = Variable(name: "foo", typeName: TypeName("Foo?", actualTypeName:TypeName("Blah.Foo?")), accessLevel: (read: .internal, write: .none), definedInTypeName: TypeName("Blah.Bar"))
+                        let expectedVariable = Variable(name: "foo", typeName: TypeName("Foo?", actualTypeName: TypeName("Blah.Foo?")), accessLevel: (read: .internal, write: .none), definedInTypeName: TypeName("Blah.Bar"))
                         let expectedBlah = Struct(name: "Blah", containedTypes: [Struct(name: "Foo"), Struct(name: "Bar", variables: [expectedVariable])])
 
                         let types = parse("struct Blah { struct Foo {}; struct Bar { let foo: Foo? }}")
@@ -916,7 +916,7 @@ class ParserComposerSpec: QuickSpec {
 
                 context("given type name with module name") {
                     func parseModules(_ modules: (name: String?, contents: String)...) -> [Type] {
-                        let moduleResults = modules.flatMap {
+                        let moduleResults = modules.compactMap {
                             try? FileParser(contents: $0.contents, module: $0.name).parse()
                         }
 

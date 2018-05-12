@@ -64,13 +64,13 @@ final class StencilTemplate: StencilSwiftKit.StencilSwiftTemplate, Template {
         ext.registerFilter("toArray", filter: toArray)
 
         ext.registerFilterWithArguments("sorted") { (array, propertyName: String) -> Any? in
-          switch array {
+            switch array {
             case let array as NSArray:
-              let sortDescriptor = NSSortDescriptor(key: propertyName, ascending: true, selector: #selector(NSString.caseInsensitiveCompare))
-              return array.sortedArray(using: [sortDescriptor])
+                let sortDescriptor = NSSortDescriptor(key: propertyName, ascending: true, selector: #selector(NSString.caseInsensitiveCompare))
+                return array.sortedArray(using: [sortDescriptor])
             default:
-              return nil
-          }
+                return nil
+            }
         }
 
         ext.registerFilterWithArguments("sortedDescending") { (array, propertyName: String) -> Any? in
@@ -106,9 +106,21 @@ final class StencilTemplate: StencilSwiftKit.StencilSwiftTemplate, Template {
 extension Annotated {
 
     func isAnnotated(with annotation: String) -> Bool {
+
         if annotation.contains("=") {
             let components = annotation.components(separatedBy: "=").map({ $0.trimmingCharacters(in: .whitespaces) })
-            return annotations[components[0]]?.description == components[1]
+            var keyPath = components[0].components(separatedBy: ".")
+            var annotationValue: Annotations? = annotations
+            while !keyPath.isEmpty && annotationValue != nil {
+                let key = keyPath.removeFirst()
+                let value = annotationValue?[key]
+                if keyPath.isEmpty {
+                    return value?.description == components[1]
+                } else {
+                    annotationValue = value as? Annotations
+                }
+            }
+            return false
         } else {
             return annotations[annotation] != nil
         }
@@ -241,7 +253,7 @@ private struct Filter<T> {
                 return filter(type)
 
             case let array as NSArray:
-                return array.flatMap { $0 as? T }.filter(filter)
+                return array.compactMap { $0 as? T }.filter(filter)
 
             default:
                 return any
@@ -256,7 +268,7 @@ private struct Filter<T> {
                 return filter(type)
 
             case let array as NSArray:
-                return array.flatMap { $0 as? T }.flatMap(filter)
+                return array.compactMap { $0 as? T }.compactMap(filter)
 
             default:
                 return any
@@ -271,7 +283,7 @@ private struct Filter<T> {
                 return filter(type, arg)
 
             case let array as NSArray:
-                return array.flatMap { $0 as? T }.filter({ filter($0, arg) })
+                return array.compactMap { $0 as? T }.filter { filter($0, arg) }
 
             default:
                 return any
@@ -292,9 +304,9 @@ private struct FilterOr<T, Y> {
 
             case let array as NSArray:
                 if array.firstObject is T {
-                    return array.flatMap { $0 as? T }.filter(filter)
+                    return array.compactMap { $0 as? T }.filter(filter)
                 } else {
-                    return array.flatMap { $0 as? Y }.filter(other)
+                    return array.compactMap { $0 as? Y }.filter(other)
                 }
 
             default:
@@ -314,9 +326,9 @@ private struct FilterOr<T, Y> {
 
             case let array as NSArray:
                 if array.firstObject is T {
-                    return array.flatMap { $0 as? T }.flatMap(filter)
+                    return array.compactMap { $0 as? T }.compactMap(filter)
                 } else {
-                    return array.flatMap { $0 as? Y }.flatMap(other)
+                    return array.compactMap { $0 as? Y }.compactMap(other)
                 }
 
             default:
@@ -336,9 +348,9 @@ private struct FilterOr<T, Y> {
 
             case let array as NSArray:
                 if array.firstObject is T {
-                    return array.flatMap { $0 as? T }.filter({ filter($0, arg) })
+                    return array.compactMap { $0 as? T }.filter({ filter($0, arg) })
                 } else {
-                    return array.flatMap { $0 as? Y }.filter({ other($0, arg) })
+                    return array.compactMap { $0 as? Y }.filter({ other($0, arg) })
                 }
 
             default:

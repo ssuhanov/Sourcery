@@ -47,16 +47,6 @@ public extension String {
     }
 
     /// :nodoc:
-    func dropFirst(_ n: Int = 1) -> String {
-        return String(self.dropFirst(n))
-    }
-
-    /// :nodoc:
-    func dropLast(_ n: Int = 1) -> String {
-        return String(self.dropLast(n))
-    }
-
-    /// :nodoc:
     func dropFirstAndLast(_ n: Int = 1) -> String {
         return drop(first: n, last: n)
     }
@@ -148,9 +138,14 @@ public extension String {
 
         for char in self {
             if between.open.contains(char) {
-                boundingCharactersCount += 1
+                if !(boundingCharactersCount == 0 && String(char) == delimiter) {
+                    boundingCharactersCount += 1
+                }
             } else if between.close.contains(char) {
-                boundingCharactersCount = max(0, boundingCharactersCount - 1)
+                // do not count `->`
+                if !(char == ">" && item.last == "-") {
+                    boundingCharactersCount = max(0, boundingCharactersCount - 1)
+                }
             }
             if char == "\"" {
                 quotesCount += 1
@@ -163,7 +158,7 @@ public extension String {
 
             if char == matchedDelimiter.leftToMatch.first {
                 matchedDelimiter.alreadyMatched.append(char)
-                matchedDelimiter.leftToMatch = matchedDelimiter.leftToMatch.dropFirst()
+                matchedDelimiter.leftToMatch = String(matchedDelimiter.leftToMatch.dropFirst())
                 if matchedDelimiter.leftToMatch.isEmpty {
                     items.append(item)
                     item = ""

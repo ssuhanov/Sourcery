@@ -86,7 +86,7 @@ import Foundation
         return flattenAll({ $0.subscripts })
     }
 
-    // sourcery: skipEquality, skipDescription
+    // sourcery: skipEquality, skipDescription, skipJSExport
     /// Bytes position of the body of this type in its declaration file if available.
     public var bodyBytesRange: BytesRange?
 
@@ -108,7 +108,7 @@ import Foundation
         inherits.values.forEach { all.addObjects(from: filteredExtraction($0)) }
         implements.values.forEach { all.addObjects(from: filteredExtraction($0)) }
 
-        return all.array.flatMap { $0 as? T }
+        return all.array.compactMap { $0 as? T }
     }
 
     /// All initializers defined in this type
@@ -126,12 +126,12 @@ import Foundation
 
     /// Static methods defined in this type
     public var staticMethods: [Method] {
-        return methods.filter({ $0.isStatic })
+        return methods.filter { $0.isStatic }
     }
 
     /// Class methods defined in this type
     public var classMethods: [Method] {
-        return methods.filter({ $0.isClass })
+        return methods.filter { $0.isClass }
     }
 
     /// Instance variables defined in this type
@@ -141,7 +141,7 @@ import Foundation
 
     /// Instance methods defined in this type
     public var instanceMethods: [Method] {
-        return methods.filter({ !$0.isStatic && !$0.isClass })
+        return methods.filter { !$0.isStatic && !$0.isClass }
     }
 
     /// Computed instance variables defined in this type
@@ -242,7 +242,6 @@ import Foundation
                 annotations: [String: NSObject] = [:],
                 isGeneric: Bool = false) {
 
-        let name = name.trimmingCharacters(in: CharacterSet(charactersIn: "`"))
         self.localName = name
         self.accessLevel = accessLevel.rawValue
         self.isExtension = isExtension
@@ -278,6 +277,7 @@ import Foundation
         self.methods += type.methods
         self.subscripts += type.subscripts
         self.inheritedTypes += type.inheritedTypes
+        self.containedTypes += type.containedTypes
 
         type.annotations.forEach { self.annotations[$0.key] = $0.value }
         type.inherits.forEach { self.inherits[$0.key] = $0.value }

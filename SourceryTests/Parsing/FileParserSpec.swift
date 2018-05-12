@@ -6,7 +6,7 @@ import SourceKittenFramework
 @testable import SourceryRuntime
 
 private func build(_ source: String) -> [String: SourceKitRepresentable]? {
-    return Structure(file: File(contents: source)).dictionary
+    return try? Structure(file: File(contents: source)).dictionary
 }
 
 class FileParserSpec: QuickSpec {
@@ -107,13 +107,23 @@ class FileParserSpec: QuickSpec {
                     }
 
                     context("given nested struct") {
-                        it("extracts properly") {
+                        it("extracts properly from body") {
                             let innerType = Struct(name: "Bar", accessLevel: .internal, isExtension: false, variables: [])
 
-                            expect(parse("public struct Foo { struct Bar { } }"))
+                            expect(parse("struct Foo { struct Bar { } }"))
                                     .to(equal([
-                                            Struct(name: "Foo", accessLevel: .public, isExtension: false, variables: [], containedTypes: [innerType]),
+                                            Struct(name: "Foo", accessLevel: .internal, isExtension: false, variables: [], containedTypes: [innerType]),
                                             innerType
+                                    ]))
+                        }
+
+                        it("extracts properly from extension") {
+                            let innerType = Struct(name: "Bar", accessLevel: .internal, isExtension: false, variables: [])
+
+                            expect(parse("struct Foo {}  extension Foo { struct Bar { } }"))
+                                .to(equal([
+                                    Struct(name: "Foo", accessLevel: .internal, isExtension: false, variables: [], containedTypes: [innerType]),
+                                    innerType
                                     ]))
                         }
                     }
@@ -136,11 +146,11 @@ class FileParserSpec: QuickSpec {
                     }
 
                     it("extracts annotations correctly") {
-                        let expectedType = Class(name: "Foo", accessLevel: .public, isExtension: false, variables: [], inheritedTypes: ["TestProtocol"])
+                        let expectedType = Class(name: "Foo", accessLevel: .internal, isExtension: false, variables: [], inheritedTypes: ["TestProtocol"])
                         expectedType.annotations["firstLine"] = NSNumber(value: true)
                         expectedType.annotations["thirdLine"] = NSNumber(value: 4543)
 
-                        expect(parse("// sourcery: thirdLine = 4543\n/// comment\n// sourcery: firstLine\npublic class Foo: TestProtocol { }"))
+                        expect(parse("// sourcery: thirdLine = 4543\n/// comment\n// sourcery: firstLine\nclass Foo: TestProtocol { }"))
                                 .to(equal([expectedType]))
                     }
                 }
@@ -201,7 +211,7 @@ class FileParserSpec: QuickSpec {
                         it("extracts typealias for void") {
                             expect(parse("typealias GlobalAlias = () -> ()").typealiases)
                                 .to(equal([
-                                    Typealias(aliasName: "GlobalAlias", typeName: TypeName("(Void) -> (Void)"))
+                                    Typealias(aliasName: "GlobalAlias", typeName: TypeName("() -> ()"))
                                     ]))
                         }
 
@@ -305,7 +315,7 @@ class FileParserSpec: QuickSpec {
                                             "block": NSNumber(value: true),
                                             "third": NSNumber(value: true)
                                             ]),
-                                        EnumCase(name: "optionC", annotations:[
+                                        EnumCase(name: "optionC", annotations: [
                                             "block": NSNumber(value: true)
                                             ])
                                         ])
@@ -458,13 +468,13 @@ class FileParserSpec: QuickSpec {
                                 ]))
                     }
 
-                    it("extracts enums with empty parenthesis as ones without associated type") {
+                    it("extracts enums with empty parenthesis as ones with () associated type") {
                         expect(parse("enum Foo { case optionA(); case optionB() }"))
                                 .to(equal([
                                                   Enum(name: "Foo", accessLevel: .internal, isExtension: false, inheritedTypes: [], cases:
                                                   [
-                                                          EnumCase(name: "optionA", associatedValues: []),
-                                                          EnumCase(name: "optionB", associatedValues: [])
+                                                          EnumCase(name: "optionA", associatedValues: [AssociatedValue(typeName: TypeName("()"))]),
+                                                          EnumCase(name: "optionB", associatedValues: [AssociatedValue(typeName: TypeName("()"))])
                                                   ])
                                           ]))
                     }
@@ -476,7 +486,7 @@ class FileParserSpec: QuickSpec {
                             let item = Enum(name: "Foo", cases: [EnumCase(name: "optionA", associatedValues: [associatedValue])])
 
                             let parsed = parse("protocol Baz {}; class Bar: Baz {}; enum Foo { case optionA(Bar) }")
-                            let parsedItem = parsed.flatMap { $0 as? Enum }.first
+                            let parsedItem = parsed.compactMap { $0 as? Enum }.first
 
                             expect(parsedItem).to(equal(item))
                             expect(associatedValue.type).to(equal(parsedItem?.cases.first?.associatedValues.first?.type))
@@ -487,7 +497,7 @@ class FileParserSpec: QuickSpec {
                             let item = Enum(name: "Foo", cases: [EnumCase(name: "optionA", associatedValues: [associatedValue])])
 
                             let parsed = parse("protocol Baz {}; class Bar: Baz {}; enum Foo { case optionA(Bar?) }")
-                            let parsedItem = parsed.flatMap { $0 as? Enum }.first
+                            let parsedItem = parsed.compactMap { $0 as? Enum }.first
 
                             expect(parsedItem).to(equal(item))
                             expect(associatedValue.type).to(equal(parsedItem?.cases.first?.associatedValues.first?.type))
@@ -498,7 +508,7 @@ class FileParserSpec: QuickSpec {
                             let item = Enum(name: "Foo", cases: [EnumCase(name: "optionA", associatedValues: [associatedValue])])
 
                             let parsed = parse("typealias Bar2 = Bar; protocol Baz {}; class Bar: Baz {}; enum Foo { case optionA(Bar2) }")
-                            let parsedItem = parsed.flatMap { $0 as? Enum }.first
+                            let parsedItem = parsed.compactMap { $0 as? Enum }.first
 
                             expect(parsedItem).to(equal(item))
                             expect(associatedValue.type).to(equal(parsedItem?.cases.first?.associatedValues.first?.type))
@@ -510,7 +520,7 @@ class FileParserSpec: QuickSpec {
                             associatedValue.type = item
 
                             let parsed = parse("protocol Baz {}; indirect enum Foo: Baz { case optionA(Foo) }")
-                            let parsedItem = parsed.flatMap { $0 as? Enum }.first
+                            let parsedItem = parsed.compactMap { $0 as? Enum }.first
 
                             expect(parsedItem).to(equal(item))
                             expect(associatedValue.type).to(equal(parsedItem?.cases.first?.associatedValues.first?.type))

@@ -12,15 +12,8 @@ BUILD_DIR = 'build/'
 ## [ Utils ] ##################################################################
 
 def version_select
-  # Find all Xcode 8 versions on this computer
-  xcodes = `mdfind "kMDItemCFBundleIdentifier = 'com.apple.dt.Xcode' && kMDItemVersion = '9.*'"`.chomp.split("\n")
-  if xcodes.empty?
-    raise "\n[!!!] You need to have Xcode 8.x to compile Sourcery.\n\n"
-  end
-  # Order by version and get the latest one
-  vers = lambda { |path| `mdls -name kMDItemVersion -raw "#{path}"` }
-  latest_xcode_version = xcodes.sort { |p1, p2| vers.call(p1) <=> vers.call(p2) }.last
-  %Q(DEVELOPER_DIR="#{latest_xcode_version}/Contents/Developer" TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault.xctoolchain)
+  latest_xcode_version = `xcode-select -p`.chomp 
+  %Q(DEVELOPER_DIR="#{latest_xcode_version}" TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault.xctoolchain)
 end
 
 def xcpretty(cmd)
@@ -53,12 +46,14 @@ end
 desc "Run the Unit Tests on Templates project"
 task :test_templates do
   print_info "Running Sourcery Templates Tests"
+  xcrun %Q(xcodebuild -workspace Sourcery.xcworkspace -scheme Sourcery -sdk macosx)
   xcrun %Q(xcodebuild -workspace Sourcery.xcworkspace -scheme TemplatesTests -sdk macosx test)
 end
 
 desc "Run the Unit Tests on all projects"
 task :tests do
   print_info "Running Unit Tests"
+  xcrun %Q(xcodebuild -workspace Sourcery.xcworkspace -scheme Sourcery -sdk macosx)
   xcrun %Q(xcodebuild -workspace Sourcery.xcworkspace -scheme Sourcery -sdk macosx test)
 end
 
@@ -70,7 +65,7 @@ end
 
 task :build do
   print_info "Building project"
-  xcrun %Q(xcodebuild -workspace Sourcery.xcworkspace -scheme Sourcery-Release -sdk macosx -derivedDataPath #{BUILD_DIR}/tmp/)
+  xcrun %Q(xcodebuild -workspace Sourcery.xcworkspace -scheme Sourcery-Release -sdk macosx -derivedDataPath #{BUILD_DIR}tmp/)
   sh %Q(rm -fr bin/Sourcery.app)
   `mv #{BUILD_DIR}tmp/Build/Products/Release/Sourcery.app bin/`
   sh %Q(rm -fr #{BUILD_DIR}tmp/)
@@ -104,14 +99,16 @@ end
 desc "Update docs"
 task :docs do
   print_info "Updating docs"
-  sh "sourcekitten doc --module-name SourceryRuntime > docs.json && bundle exec jazzy --clean --skip-undocumented && rm docs.json"
+  temp_build_dir = "#{BUILD_DIR}tmp/"
+  sh "sourcekitten doc --module-name SourceryRuntime -- -workspace Sourcery.xcworkspace -scheme Sourcery-Release -derivedDataPath #{temp_build_dir} > docs.json && bundle exec jazzy --clean --skip-undocumented --exclude=/*/*.generated.swift,/*/BytesRange.swift,/*/Typealias.swift,/*/FileParserResult.swift && rm docs.json"
+  sh "rm -fr #{temp_build_dir}"
 end
 
 desc "Validate docs"
 task :validate_docs do
   print_info "Checking docs are up to date"
   temp_build_dir = "#{BUILD_DIR}tmp/"
-  sh "sourcekitten doc --module-name SourceryRuntime -- -workspace Sourcery.xcworkspace -scheme Sourcery-Release -derivedDataPath #{temp_build_dir} > docs.json && bundle exec jazzy --skip-undocumented --no-download-badge && rm docs.json"
+  sh "sourcekitten doc --module-name SourceryRuntime -- -workspace Sourcery.xcworkspace -scheme Sourcery-Release -derivedDataPath #{temp_build_dir} > docs.json && bundle exec jazzy --skip-undocumented --no-download-badge --exclude=/*/*.generated.swift,/*/BytesRange.swift,/*/Typealias.swift,/*/FileParserResult.swift && rm docs.json"
   sh "rm -fr #{temp_build_dir}"
 end
 
@@ -119,7 +116,7 @@ end
 
 namespace :release do
   desc 'Create a new release on GitHub, CocoaPods and Homebrew'
-  task :new => [:clean, :install_dependencies, :check_environment_variables, :check_docs, :check_ci, :generate_internal_boilerplate_code, :tests, :update_metadata, :check_versions, :build, :tag_release, :github, :cocoapods, :homebrew]
+  task :new => [:clean, :install_dependencies, :check_environment_variables, :check_docs, :check_ci,  :update_metadata, :generate_internal_boilerplate_code, :tests, :build, :check_versions, :tag_release, :github, :cocoapods, :homebrew]
 
   def podspec_update_version(version, file = 'Sourcery.podspec')
     # The code is mainly taken from https://github.com/fastlane/fastlane/blob/master/fastlane/lib/fastlane/helper/podspec_helper.rb

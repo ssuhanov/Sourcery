@@ -32,6 +32,41 @@ private let commentLinePrefixCharacterSet: CharacterSet = {
     return characterSet
 }()
 
+// swiftlint:disable:next line_length
+// https://developer.apple.com/library/content/documentation/Swift/Conceptual/Swift_Programming_Language/LexicalStructure.html#//apple_ref/swift/grammar/line-break
+private let newlinesCharacterSet = CharacterSet(charactersIn: "\u{000A}\u{000D}")
+
+private extension RandomAccessCollection {
+    /// Binary search assuming the collection is already sorted.
+    ///
+    /// - parameter comparing: Comparison function.
+    ///
+    /// - returns: The index in the collection of the element matching the `comparing` function.
+    func indexAssumingSorted(comparing: (Element) throws -> ComparisonResult) rethrows -> Index? {
+        guard !isEmpty else {
+            return nil
+        }
+
+        var lowerBound = startIndex
+        var upperBound = index(before: endIndex)
+        var midIndex: Index
+
+        while lowerBound <= upperBound {
+            let boundDistance = distance(from: lowerBound, to: upperBound)
+            midIndex = index(lowerBound, offsetBy: boundDistance / 2)
+            let midElem = self[midIndex]
+
+            switch try comparing(midElem) {
+            case .orderedDescending: lowerBound = index(midIndex, offsetBy: 1)
+            case .orderedAscending: upperBound = index(midIndex, offsetBy: -1)
+            case .orderedSame: return midIndex
+            }
+        }
+
+        return nil
+    }
+}
+
 extension NSString {
     /**
     CacheContainer caches:
@@ -63,12 +98,12 @@ extension NSString {
             var utf16CountSoFar = 0
             var bytesSoFar = 0
             var lines = [Line]()
-            let lineContents = string.components(separatedBy: .newlines)
+            let lineContents = string.components(separatedBy: newlinesCharacterSet)
             // Be compatible with `NSString.getLineStart(_:end:contentsEnd:forRange:)`
             let endsWithNewLineCharacter: Bool
             if let lastChar = string.utf16.last,
                 let lastCharScalar = UnicodeScalar(lastChar) {
-                endsWithNewLineCharacter = CharacterSet.newlines.contains(lastCharScalar)
+                endsWithNewLineCharacter = newlinesCharacterSet.contains(lastCharScalar)
             } else {
                 endsWithNewLineCharacter = false
             }
@@ -113,7 +148,14 @@ extension NSString {
             if lines.isEmpty {
                 return 0
             }
-            let index = lines.index(where: { NSLocationInRange(byteOffset, $0.byteRange) })
+            let index = lines.indexAssumingSorted { line in
+                if byteOffset < line.byteRange.location {
+                    return .orderedAscending
+                } else if byteOffset >= line.byteRange.location + line.byteRange.length {
+                    return .orderedDescending
+                }
+                return .orderedSame
+            }
             // byteOffset may be out of bounds when sourcekitd points end of string.
             guard let line = (index.map { lines[$0] } ?? lines.last) else {
                 fatalError()
@@ -142,7 +184,14 @@ extension NSString {
             if lines.isEmpty {
                 return 0
             }
-            let index = lines.index(where: { NSLocationInRange(location, $0.range) })
+            let index = lines.indexAssumingSorted { line in
+                if location < line.range.location {
+                    return .orderedAscending
+                } else if location >= line.range.location + line.range.length {
+                    return .orderedDescending
+                }
+                return .orderedSame
+            }
             // location may be out of bounds when NSRegularExpression points end of string.
             guard let line = (index.map { lines[$0] } ?? lines.last) else {
                 fatalError()
@@ -160,17 +209,42 @@ extension NSString {
             return line.byteRange.location + byteDiff
         }
 
-        func lineAndCharacter(forCharacterOffset offset: Int) -> (line: Int, character: Int)? {
-            let index = lines.index(where: { NSLocationInRange(offset, $0.range) })
+        func lineAndCharacter(forCharacterOffset offset: Int, expandingTabsToWidth tabWidth: Int) -> (line: Int, character: Int)? {
+            assert(tabWidth > 0)
+
+            let index = lines.indexAssumingSorted { line in
+                if offset < line.range.location {
+                    return .orderedAscending
+                } else if offset >= line.range.location + line.range.length {
+                    return .orderedDescending
+                }
+                return .orderedSame
+            }
             return index.map {
                 let line = lines[$0]
-                return (line: line.index, character: offset - line.range.location + 1)
+
+                let prefixLength = offset - line.range.location
+                let character: Int
+
+                if tabWidth == 1 {
+                    character = prefixLength
+                } else {
+                    character = line.content.prefix(prefixLength).reduce(0) { sum, character in
+                        if character == "\t" {
+                            return sum - (sum % tabWidth) + tabWidth
+                        } else {
+                            return sum + 1
+                        }
+                    }
+                }
+
+                return (line: line.index, character: character + 1)
             }
         }
 
-        func lineAndCharacter(forByteOffset offset: Int) -> (line: Int, character: Int)? {
+        func lineAndCharacter(forByteOffset offset: Int, expandingTabsToWidth tabWidth: Int) -> (line: Int, character: Int)? {
             let characterOffset = location(fromByteOffset: offset)
-            return lineAndCharacter(forCharacterOffset: characterOffset)
+            return lineAndCharacter(forCharacterOffset: characterOffset, expandingTabsToWidth: tabWidth)
         }
     }
 
@@ -195,18 +269,20 @@ extension NSString {
     Returns line number and character for utf16 based offset.
 
     - parameter offset: utf16 based index.
+    - parameter tabWidth: the width in spaces to expand tabs to.
     */
-    public func lineAndCharacter(forCharacterOffset offset: Int) -> (line: Int, character: Int)? {
-        return cacheContainer.lineAndCharacter(forCharacterOffset: offset)
+    public func lineAndCharacter(forCharacterOffset offset: Int, expandingTabsToWidth tabWidth: Int = 1) -> (line: Int, character: Int)? {
+        return cacheContainer.lineAndCharacter(forCharacterOffset: offset, expandingTabsToWidth: tabWidth)
     }
 
     /**
     Returns line number and character for byte offset.
 
     - parameter offset: byte offset.
+    - parameter tabWidth: the width in spaces to expand tabs to.
     */
-    public func lineAndCharacter(forByteOffset offset: Int) -> (line: Int, character: Int)? {
-        return cacheContainer.lineAndCharacter(forByteOffset: offset)
+    public func lineAndCharacter(forByteOffset offset: Int, expandingTabsToWidth tabWidth: Int = 1) -> (line: Int, character: Int)? {
+        return cacheContainer.lineAndCharacter(forByteOffset: offset, expandingTabsToWidth: tabWidth)
     }
 
     /**
@@ -395,7 +471,7 @@ extension String {
     }
 
     internal func capitalizingFirstLetter() -> String {
-        return String(characters.prefix(1)).capitalized + String(characters.dropFirst())
+        return String(prefix(1)).capitalized + String(dropFirst())
     }
 
 #if !os(Linux)
@@ -411,7 +487,7 @@ extension String {
         }
         let matches = regex.matches(in: self, options: [], range: range)
 
-        return matches.flatMap { match in
+        return matches.compactMap { match in
             let markRange = match.range(at: 2)
             for excludedRange in excludeRanges {
                 if NSIntersectionRange(excludedRange, markRange).length > 0 {
@@ -429,7 +505,8 @@ extension String {
                 line: UInt32((self as NSString).lineRangeWithByteRange(start: markByteRange.location, length: 0)!.start),
                 column: 1, offset: UInt32(markByteRange.location))
             return SourceDeclaration(type: .mark, location: location, extent: (location, location), name: markString,
-                usr: nil, declaration: nil, documentation: nil, commentBody: nil, children: [], swiftDeclaration: nil, availability: nil)
+                                     usr: nil, declaration: nil, documentation: nil, commentBody: nil, children: [],
+                                     swiftDeclaration: nil, swiftName: nil, availability: nil)
         }
     }
 #endif
@@ -469,7 +546,7 @@ extension String {
         let range = NSRange(location: 0, length: utf16.count)
         let matches = regex.matches(in: self, options: [], range: range)
 
-        return matches.flatMap { match in
+        return matches.compactMap { match in
             documentableOffsets.first { $0 >= match.range.location }
         }
     }
@@ -528,25 +605,20 @@ extension String {
     public func removingCommonLeadingWhitespaceFromLines() -> String {
         var minLeadingCharacters = Int.max
 
-        let lineComponents = components(separatedBy: .newlines)
+        let lineComponents = components(separatedBy: newlinesCharacterSet)
 
         for line in lineComponents {
             let lineLeadingWhitespace = line.countOfLeadingCharacters(in: .whitespacesAndNewlines)
             let lineLeadingCharacters = line.countOfLeadingCharacters(in: commentLinePrefixCharacterSet)
             // Is this prefix smaller than our last and not entirely whitespace?
-            if lineLeadingCharacters < minLeadingCharacters && lineLeadingWhitespace != line.characters.count {
+            if lineLeadingCharacters < minLeadingCharacters && lineLeadingWhitespace != line.count {
                 minLeadingCharacters = lineLeadingCharacters
             }
         }
 
         return lineComponents.map { line in
-            if line.characters.count >= minLeadingCharacters {
-#if swift(>=3.2)
+            if line.count >= minLeadingCharacters {
                 return String(line[line.index(line.startIndex, offsetBy: minLeadingCharacters)...])
-#else
-                let range: Range = line.index(line.startIndex, offsetBy: minLeadingCharacters)..<line.endIndex
-                return line.substring(with: range)
-#endif
             }
             return line
         }.joined(separator: "\n")

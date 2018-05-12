@@ -24,3 +24,13 @@ struct Room: AutoLenses {
 struct Person: AutoLenses {
     let name: String
 }
+
+// swiftlint:disable identifier_name
+struct Rectangle: AutoLenses {
+    let x: Int
+    let y: Int
+
+    var area: Int {
+        return x*y
+    }
+}

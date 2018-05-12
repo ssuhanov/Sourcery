@@ -144,6 +144,13 @@ struct Output {
     let path: Path
     let linkTo: LinkTo?
 
+    var isDirectory: Bool {
+        guard path.exists else {
+            return path.lastComponentWithoutExtension == path.lastComponent || path.string.hasSuffix("/")
+        }
+        return path.isDirectory
+    }
+
     init(dict: [String: Any], relativePath: Path) throws {
         guard let path = dict["path"] as? String else {
             throw Configuration.Error.invalidOutput(message: "No path provided.")
@@ -172,6 +179,7 @@ struct Configuration {
         case invalidSources(message: String)
         case invalidTemplates(message: String)
         case invalidOutput(message: String)
+        case invalidCacheBasePath(message: String)
         case invalidPaths(message: String)
 
         var description: String {
@@ -184,6 +192,8 @@ struct Configuration {
                 return "Invalid templates. \(message)"
             case .invalidOutput(let message):
                 return "Invalid output. \(message)"
+            case .invalidCacheBasePath(let message):
+                return "Invalid cacheBasePath. \(message)"
             case .invalidPaths(let message):
                 return "\(message)"
             }
@@ -193,6 +203,7 @@ struct Configuration {
     let source: Source
     let templates: Paths
     let output: Output
+    let cacheBasePath: Path
     let forceParse: [String]
     let args: [String: NSObject]
 
@@ -235,13 +246,22 @@ struct Configuration {
             throw Configuration.Error.invalidOutput(message: "'output' key is missing or is not a string or object.")
         }
 
+        if let cacheBasePath = dict["cacheBasePath"] as? String {
+            self.cacheBasePath = Path(cacheBasePath, relativeTo: relativePath)
+        } else if dict["cacheBasePath"] != nil {
+            throw Configuration.Error.invalidCacheBasePath(message: "'cacheBasePath' key is not a string.")
+        } else {
+            self.cacheBasePath = Path.defaultBaseCachePath
+        }
+
         self.args = dict["args"] as? [String: NSObject] ?? [:]
     }
 
-    init(sources: [Path], templates: [Path], output: Path, forceParse: [String], args: [String: NSObject]) {
-        self.source = .sources(Paths(include: sources))
-        self.templates = Paths(include: templates)
+    init(sources: Paths, templates: Paths, output: Path, cacheBasePath: Path, forceParse: [String], args: [String: NSObject]) {
+        self.source = .sources(sources)
+        self.templates = templates
         self.output = Output(output, linkTo: nil)
+        self.cacheBasePath = cacheBasePath
         self.forceParse = forceParse
         self.args = args
     }

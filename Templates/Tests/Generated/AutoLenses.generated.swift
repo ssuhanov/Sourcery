@@ -1,4 +1,4 @@
-// Generated using Sourcery 0.10.1 — https://github.com/krzysztofzablocki/Sourcery
+// Generated using Sourcery 0.13.1 — https://github.com/krzysztofzablocki/Sourcery
 // DO NOT EDIT
 
 // swiftlint:disable variable_name
@@ -54,6 +54,20 @@ extension Person {
     get: { $0.name },
     set: { name, person in
        Person(name: name)
+    }
+  )
+}
+extension Rectangle {
+  static let xLens = Lens<Rectangle, Int>(
+    get: { $0.x },
+    set: { x, rectangle in
+       Rectangle(x: x, y: rectangle.y)
+    }
+  )
+  static let yLens = Lens<Rectangle, Int>(
+    get: { $0.y },
+    set: { y, rectangle in
+       Rectangle(x: rectangle.x, y: y)
     }
   )
 }

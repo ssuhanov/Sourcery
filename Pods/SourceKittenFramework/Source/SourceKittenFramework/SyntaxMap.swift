@@ -47,9 +47,10 @@ public struct SyntaxMap {
     Create a SyntaxMap from a File to be parsed.
 
     - parameter file: File to be parsed.
+    - throws: Request.Error
     */
-    public init(file: File) {
-        self.init(sourceKitResponse: Request.editorOpen(file: file).send())
+    public init(file: File) throws {
+        self.init(sourceKitResponse: try Request.editorOpen(file: file).send())
     }
 }
 
@@ -67,7 +68,7 @@ extension SyntaxMap {
     /// that they occur in the file.
     internal var docCommentRanges: [Range<Int>] {
         let docCommentBlocks = tokens.split { !$0.isDocComment }
-        return docCommentBlocks.flatMap { ranges in
+        return docCommentBlocks.compactMap { ranges in
             ranges.first.flatMap { first in
                 ranges.last.flatMap { last -> Range<Int>? in
                     first.offset..<last.offset + last.length

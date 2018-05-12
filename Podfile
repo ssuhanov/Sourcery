@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-# platform :ios, '9.0'
+platform :osx, '10.11'
 
 workspace 'Sourcery.xcworkspace'
 use_frameworks!
@@ -19,15 +19,22 @@ target 'TemplatesTests' do
   meta
   test_pods
 end
+target 'CodableContextTests' do
+  project 'Templates/Templates.xcodeproj'
+  meta
+  test_pods
+end
 
 target 'Sourcery' do
-  pod 'StencilSwiftKit', :git=>'https://github.com/SwiftGen/StencilSwiftKit.git', :branch=>'master'
-  pod 'Commander'
-  pod 'PathKit'
-  pod "xcproj"
-  pod 'SourceKittenFramework', '~> 0.17'
+  pod 'Stencil', '0.10.1'
+  pod 'StencilSwiftKit', '2.4.0' 
+  pod 'Commander', '0.6.0'
+  pod 'PathKit', '0.8.0'
+  pod "xcproj", '4.2.0'
+  pod 'SourceKittenFramework', '0.20.0'
   pod 'SwiftTryCatch', :git => 'git@github.com:seanparsons/SwiftTryCatch', :commit => '798c512'
   pod 'libCommonCrypto'
+  pod 'AEXML', '4.2.2'
 
   target 'SourceryTests' do
     inherit! :search_paths
@@ -44,7 +51,7 @@ target 'SourcerySwift' do
   pod 'libCommonCrypto'
 end
 
-swift4 = ['xcproj']
+swift4 = ['SourceKittenFramework', 'Yams', 'xcproj']
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|

@@ -6,7 +6,7 @@ import SourceKittenFramework
 @testable import SourceryRuntime
 
 private func build(_ source: String) -> [String: SourceKitRepresentable]? {
-    return Structure(file: File(contents: source)).dictionary
+    return try? Structure(file: File(contents: source)).dictionary
 }
 
 class FileParserMethodsSpec: QuickSpec {
@@ -20,32 +20,49 @@ class FileParserMethodsSpec: QuickSpec {
                 }
 
                 it("extracts methods properly") {
-                    let methods = parse("class Foo { init() throws; func bar(some: Int) throws ->Bar {}; func foo() ->  \n  Foo {}; func fooBar() rethrows {}; func fooVoid(){}; func fooInOut(some: Int, anotherSome: inout String)\n{} deinit {} }")[0].methods
+                    let methods = parse("""
+                    class Foo {
+                        init() throws {}; func bar(some: Int) throws ->Bar {}
+                        @discardableResult func foo() ->
+                                                    Foo {}
+                        func fooBar() rethrows {}
+                        func fooVoid(){}
+                        func fooInOut(some: Int, anotherSome: inout String)
+                        {} deinit {}
+                    }
+                    """)[0].methods
 
                     expect(methods[0]).to(equal(Method(name: "init()", selectorName: "init", parameters: [], returnTypeName: TypeName("Foo"), throws: true, definedInTypeName: TypeName("Foo"))))
                     expect(methods[1]).to(equal(Method(name: "bar(some: Int)", selectorName: "bar(some:)", parameters: [MethodParameter(name: "some", typeName: TypeName("Int"))], returnTypeName: TypeName("Bar"), throws: true, definedInTypeName: TypeName("Foo"))))
-                    expect(methods[2]).to(equal(Method(name: "foo()", selectorName: "foo", returnTypeName: TypeName("Foo"), definedInTypeName: TypeName("Foo"))))
+                    expect(methods[2]).to(equal(Method(name: "foo()", selectorName: "foo", returnTypeName: TypeName("Foo"), attributes: ["discardableResult": Attribute(name: "discardableResult")], definedInTypeName: TypeName("Foo"))))
                     expect(methods[3]).to(equal(Method(name: "fooBar()", selectorName: "fooBar", returnTypeName: TypeName("Void"), throws: false, rethrows: true, definedInTypeName: TypeName("Foo"))))
                     expect(methods[4]).to(equal(Method(name: "fooVoid()", selectorName: "fooVoid", returnTypeName: TypeName("Void"), definedInTypeName: TypeName("Foo"))))
                     expect(methods[5]).to(equal(Method(name: "fooInOut(some: Int, anotherSome: inout String)", selectorName: "fooInOut(some:anotherSome:)", parameters: [
                     MethodParameter(name: "some", typeName: TypeName("Int")),
-                    MethodParameter(name: "anotherSome", typeName: TypeName("inout String"), `inout`: true)
+                    MethodParameter(name: "anotherSome", typeName: TypeName("inout String"), isInout: true)
                     ], returnTypeName: TypeName("Void"), definedInTypeName: TypeName("Foo"))))
                     expect(methods[6]).to(equal(Method(name: "deinit", selectorName: "deinit", definedInTypeName: TypeName("Foo"))))
                 }
 
                 it("extracts protocol methods properly") {
-                    let methods = parse("protocol Foo { init() throws; func bar(some: Int) throws ->Bar ; func foo() ->    Foo ; func fooBar() rethrows ; func fooVoid(); func fooInOut(some: Int, anotherSome: inout String) }")[0].methods
+                    let methods = parse("""
+                    protocol Foo {
+                        init() throws; func bar(some: Int) throws ->Bar
+                        @discardableResult func foo() ->
+                                                    Foo
+                        func fooBar() rethrows ; func fooVoid();
+                        func fooInOut(some: Int, anotherSome: inout String) }
+                    """)[0].methods
                     expect(methods[0]).to(equal(Method(name: "init()", selectorName: "init", parameters: [], returnTypeName: TypeName("Foo"), throws: true, definedInTypeName: TypeName("Foo"))))
                     expect(methods[1]).to(equal(Method(name: "bar(some: Int)", selectorName: "bar(some:)", parameters: [
                         MethodParameter(name: "some", typeName: TypeName("Int"))
                         ], returnTypeName: TypeName("Bar"), throws: true, definedInTypeName: TypeName("Foo"))))
-                    expect(methods[2]).to(equal(Method(name: "foo()", selectorName: "foo", returnTypeName: TypeName("Foo"), definedInTypeName: TypeName("Foo"))))
+                    expect(methods[2]).to(equal(Method(name: "foo()", selectorName: "foo", returnTypeName: TypeName("Foo"), attributes: ["discardableResult": Attribute(name: "discardableResult")], definedInTypeName: TypeName("Foo"))))
                     expect(methods[3]).to(equal(Method(name: "fooBar()", selectorName: "fooBar", returnTypeName: TypeName("Void"), throws: false, rethrows: true, definedInTypeName: TypeName("Foo"))))
                     expect(methods[4]).to(equal(Method(name: "fooVoid()", selectorName: "fooVoid", returnTypeName: TypeName("Void"), definedInTypeName: TypeName("Foo"))))
                     expect(methods[5]).to(equal(Method(name: "fooInOut(some: Int, anotherSome: inout String)", selectorName: "fooInOut(some:anotherSome:)", parameters: [
                         MethodParameter(name: "some", typeName: TypeName("Int")),
-                        MethodParameter(name: "anotherSome", typeName: TypeName("inout String"), `inout`: true)
+                        MethodParameter(name: "anotherSome", typeName: TypeName("inout String"), isInout: true)
                         ], returnTypeName: TypeName("Void"), definedInTypeName: TypeName("Foo"))))
                 }
 
@@ -160,7 +177,7 @@ class FileParserMethodsSpec: QuickSpec {
                         expect(parse("class Foo { func foo(a: inout Int) {} }")).to(equal([
                             Class(name: "Foo", methods: [
                                 Method(name: "foo(a: inout Int)", selectorName: "foo(a:)", parameters: [
-                                    MethodParameter(argumentLabel: "a", name: "a", typeName: TypeName("inout Int"), `inout`: true)
+                                    MethodParameter(argumentLabel: "a", name: "a", typeName: TypeName("inout Int"), isInout: true)
                                     ], returnTypeName: TypeName("Void"), definedInTypeName: TypeName("Foo"))
                                 ])
                             ]))
@@ -216,12 +233,29 @@ class FileParserMethodsSpec: QuickSpec {
                     }
 
                     it("extracts class method properly") {
-                        let types = parse("class Foo { func foo<T: Equatable>() -> Bar?\n where \nT: Equatable { }; func fooBar<T>(bar: T) where T: Equatable { } }; class Bar {}")
+                        let types = parse("""
+                        class Foo {
+                            func foo<T: Equatable>() -> Bar?\n where \nT: Equatable {
+                            };  /// Asks a Duck to quack
+                                ///
+                                /// - Parameter times: How many times the Duck will quack
+                            func fooBar<T>(bar: T) where T: Equatable { }
+                        };
+                        class Bar {}
+                        """)
                         assertMethods(types)
                     }
 
                     it("extracts protocol method properly") {
-                        let types = parse("protocol Foo { func foo<T: Equatable>() -> Bar?\n where \nT: Equatable ; func fooBar<T>(bar: T) where T: Equatable }; class Bar {}")
+                        let types = parse("""
+                        protocol Foo {
+                            func foo<T: Equatable>() -> Bar?\n where \nT: Equatable  /// Asks a Duck to quack
+                                ///
+                                /// - Parameter times: How many times the Duck will quack
+                            func fooBar<T>(bar: T) where T: Equatable
+                        };
+                        class Bar {}
+                        """)
                         assertMethods(types)
                     }
                 }

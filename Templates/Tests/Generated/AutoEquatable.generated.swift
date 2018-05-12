@@ -1,4 +1,4 @@
-// Generated using Sourcery 0.10.1 — https://github.com/krzysztofzablocki/Sourcery
+// Generated using Sourcery 0.13.1 — https://github.com/krzysztofzablocki/Sourcery
 // DO NOT EDIT
 
 // swiftlint:disable file_length
@@ -40,6 +40,11 @@ extension AutoEquatableClassInherited: Equatable {}
 THIS WONT COMPILE, WE DONT SUPPORT INHERITANCE for AutoEquatable
 internal func == (lhs: AutoEquatableClassInherited, rhs: AutoEquatableClassInherited) -> Bool {
     guard compareOptionals(lhs: lhs.middleName, rhs: rhs.middleName, compare: ==) else { return false }
+    return true
+}
+// MARK: - AutoEquatableNSObject AutoEquatable
+internal func == (lhs: AutoEquatableNSObject, rhs: AutoEquatableNSObject) -> Bool {
+    guard lhs.firstName == rhs.firstName else { return false }
     return true
 }
 // MARK: - AutoEquatableProtocol AutoEquatable

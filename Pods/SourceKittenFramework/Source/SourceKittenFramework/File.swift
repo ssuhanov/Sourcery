@@ -6,6 +6,7 @@
 //  Copyright (c) 2015 SourceKitten. All rights reserved.
 //
 
+import Dispatch
 import Foundation
 #if SWIFT_PACKAGE
 import SourceKit
@@ -20,9 +21,38 @@ public final class File {
     /// File path. Nil if initialized directly with `File(contents:)`.
     public let path: String?
     /// File contents.
-    public var contents: String
+    public var contents: String {
+        get {
+            _contentsQueue.sync {
+                if _contents == nil {
+                    _contents = try! String(contentsOfFile: path!, encoding: .utf8)
+                }
+            }
+            return _contents!
+        }
+        set {
+            _contentsQueue.sync {
+                _contents = newValue
+                _linesQueue.sync {
+                    _lines = nil
+                }
+            }
+        }
+    }
     /// File lines.
-    public var lines: [Line]
+    public var lines: [Line] {
+        _linesQueue.sync {
+            if _lines == nil {
+                _lines = contents.bridge().lines()
+            }
+        }
+        return _lines!
+    }
+
+    private var _contents: String?
+    private var _lines: [Line]?
+    private let _contentsQueue = DispatchQueue(label: "com.sourcekitten.sourcekitten.file.contents")
+    private let _linesQueue = DispatchQueue(label: "com.sourcekitten.sourcekitten.file.lines")
 
     /**
     Failable initializer by path. Fails if file contents could not be read as a UTF8 string.
@@ -32,12 +62,15 @@ public final class File {
     public init?(path: String) {
         self.path = path.bridge().absolutePathRepresentation()
         do {
-            contents = try String(contentsOfFile: path, encoding: .utf8)
-            lines = contents.bridge().lines()
+            _contents = try String(contentsOfFile: path, encoding: .utf8)
         } catch {
             fputs("Could not read contents of `\(path)`\n", stderr)
             return nil
         }
+    }
+
+    public init(pathDeferringReading path: String) {
+        self.path = path.bridge().absolutePathRepresentation()
     }
 
     /**
@@ -47,24 +80,28 @@ public final class File {
     */
     public init(contents: String) {
         path = nil
-        self.contents = contents
-        lines = contents.bridge().lines()
+        _contents = contents
     }
 
-    /**
-     Formats the file.
-     */
+    /// Formats the file.
+    ///
+    /// - Parameters:
+    ///   - trimmingTrailingWhitespace: Boolean
+    ///   - useTabs: Boolean
+    ///   - indentWidth: Int
+    /// - Returns: formatted String
+    /// - Throws: Request.Error
     public func format(trimmingTrailingWhitespace: Bool,
                        useTabs: Bool,
-                       indentWidth: Int) -> String {
+                       indentWidth: Int) throws -> String {
         guard let path = path else {
             return contents
         }
-        _ = Request.editorOpen(file: self).send()
+        _ = try Request.editorOpen(file: self).send()
         var newContents = [String]()
         var offset = 0
         for line in lines {
-            let formatResponse = Request.format(file: path,
+            let formatResponse = try Request.format(file: path,
                                                 line: Int64(line.index),
                                                 useTabs: useTabs,
                                                 indentWidth: Int64(indentWidth)).send()
@@ -73,7 +110,7 @@ public final class File {
 
             guard newText != line.content else { continue }
 
-            _ = Request.replaceText(file: path,
+            _ = try Request.replaceText(file: path,
                                     offset: Int64(line.byteRange.location + offset),
                                     length: Int64(line.byteRange.length - 1),
                                     sourceText: newText).send()
@@ -109,7 +146,8 @@ public final class File {
         } else {
             substring = contents.bridge().substringLinesWithByteRange(start: start, length: 0)
         }
-        return substring?.trimmingWhitespaceAndOpeningCurlyBrace()
+        return substring?.removingCommonLeadingWhitespaceFromLines()
+                         .trimmingWhitespaceAndOpeningCurlyBrace()
     }
 
     /**
@@ -158,7 +196,7 @@ public final class File {
     - parameter dictionary:        Dictionary to process.
     - parameter cursorInfoRequest: Cursor.Info request to get declaration information.
     */
-    public func process(dictionary: [String: SourceKitRepresentable], cursorInfoRequest: sourcekitd_object_t? = nil,
+    public func process(dictionary: [String: SourceKitRepresentable], cursorInfoRequest: SourceKitObject? = nil,
                         syntaxMap: SyntaxMap? = nil) -> [String: SourceKitRepresentable] {
         var dictionary = dictionary
         if let cursorInfoRequest = cursorInfoRequest {
@@ -200,7 +238,7 @@ public final class File {
     - parameter cursorInfoRequest:      Cursor.Info request to get declaration information.
     */
     internal func furtherProcess(dictionary: [String: SourceKitRepresentable], documentedTokenOffsets: [Int],
-                                 cursorInfoRequest: sourcekitd_object_t,
+                                 cursorInfoRequest: SourceKitObject,
                                  syntaxMap: SyntaxMap) -> [String: SourceKitRepresentable] {
         var dictionary = dictionary
         let offsetMap = makeOffsetMap(documentedTokenOffsets: documentedTokenOffsets, dictionary: dictionary)
@@ -228,10 +266,9 @@ public final class File {
                `processDictionary(_:cursorInfoRequest:syntaxMap:)` on its elements, only keeping comment marks
                and declarations.
     */
-    private func newSubstructure(_ dictionary: [String: SourceKitRepresentable], cursorInfoRequest: sourcekitd_object_t?,
+    private func newSubstructure(_ dictionary: [String: SourceKitRepresentable], cursorInfoRequest: SourceKitObject?,
                                  syntaxMap: SyntaxMap?) -> [SourceKitRepresentable]? {
         return SwiftDocKey.getSubstructure(dictionary)?
-            .map({ $0 as! [String: SourceKitRepresentable] })
             .filter(isDeclarationOrCommentMark)
             .map {
                 process(dictionary: $0, cursorInfoRequest: cursorInfoRequest, syntaxMap: syntaxMap)
@@ -245,7 +282,7 @@ public final class File {
     - parameter cursorInfoRequest: Cursor.Info request to get declaration information.
     */
     private func dictWithCommentMarkNamesCursorInfo(_ dictionary: [String: SourceKitRepresentable],
-                                                    cursorInfoRequest: sourcekitd_object_t) -> [String: SourceKitRepresentable]? {
+                                                    cursorInfoRequest: SourceKitObject) -> [String: SourceKitRepresentable]? {
         guard let kind = SwiftDocKey.getKind(dictionary) else {
             return nil
         }
@@ -303,7 +340,7 @@ public final class File {
     private func insert(doc: [String: SourceKitRepresentable], parent: [String: SourceKitRepresentable], offset: Int64) -> [String: SourceKitRepresentable]? {
         var parent = parent
         if shouldInsert(parent: parent, offset: offset) {
-            var substructure = SwiftDocKey.getSubstructure(parent) as! [[String: SourceKitRepresentable]]
+            var substructure = SwiftDocKey.getSubstructure(parent)!
             let docOffset = SwiftDocKey.getBestOffset(doc)!
 
             let insertIndex = substructure.index(where: { structure in
@@ -319,10 +356,12 @@ public final class File {
             guard var subArray = parent[key] as? [SourceKitRepresentable] else {
                 continue
             }
-            for i in 0..<subArray.count {
-                let subDict = insert(doc: doc, parent: subArray[i] as! [String: SourceKitRepresentable], offset: offset)
+            for index in 0..<subArray.count {
+                let subDict = insert(doc: doc,
+                                     parent: subArray[index] as! [String: SourceKitRepresentable],
+                                     offset: offset)
                 if let subDict = subDict {
-                    subArray[i] = subDict
+                    subArray[index] = subDict
                     parent[key] = subArray
                     return parent
                 }
@@ -390,7 +429,7 @@ public final class File {
 
         if let substructure = SwiftDocKey.getSubstructure(dictionary) {
             dictionary[SwiftDocKey.substructure.rawValue] = substructure.map {
-                addDocComments(dictionary: $0 as! [String: SourceKitRepresentable], finder: finder)
+                addDocComments(dictionary: $0, finder: finder)
             }
         }
 
@@ -462,7 +501,7 @@ private extension XMLIndexer {
         if children.isEmpty {
             return nil
         }
-        let elements = children.flatMap { $0.element }
+        let elements = children.compactMap { $0.element }
         func dictionary(from element: SWXMLHash.XMLElement) -> [String: SourceKitRepresentable] {
             return [element.name: element.text]
         }

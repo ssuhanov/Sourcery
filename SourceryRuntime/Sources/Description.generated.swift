@@ -1,4 +1,4 @@
-// Generated using Sourcery 0.10.1 — https://github.com/krzysztofzablocki/Sourcery
+// Generated using Sourcery 0.13.1 — https://github.com/krzysztofzablocki/Sourcery
 // DO NOT EDIT
 
 // swiftlint:disable vertical_whitespace
@@ -37,6 +37,7 @@ extension Class {
     /// :nodoc:
     override public var description: String {
         var string = super.description
+        string += ", "
         string += "kind = \(String(describing: self.kind)), "
         string += "isFinal = \(String(describing: self.isFinal))"
         return string
@@ -68,6 +69,7 @@ extension Enum {
     /// :nodoc:
     override public var description: String {
         var string = super.description
+        string += ", "
         string += "cases = \(String(describing: self.cases)), "
         string += "rawTypeName = \(String(describing: self.rawTypeName)), "
         string += "hasAssociatedValues = \(String(describing: self.hasAssociatedValues))"
@@ -155,6 +157,7 @@ extension Protocol {
     /// :nodoc:
     override public var description: String {
         var string = super.description
+        string += ", "
         string += "kind = \(String(describing: self.kind))"
         return string
     }
@@ -163,6 +166,7 @@ extension Struct {
     /// :nodoc:
     override public var description: String {
         var string = super.description
+        string += ", "
         string += "kind = \(String(describing: self.kind))"
         return string
     }

@@ -2,7 +2,52 @@
 
 ---
 
-## Master
+## 0.13.1
+
+### New Features
+
+- Added support for enums in AutoCodable template
+- You can now specify the base path for the Sourcery cache directory with a `cacheBasePath` key in the config file
+
+## 0.13.0
+
+### New Features
+
+- Added AutoCodable template
+
+### Bug fixes
+
+- Fixed parsing protocol method return type followed by declaration with attribute
+- Fixed inserting auto-inlined code on the last line of declaration body
+- AutoEquatable and AutoHashable templates should not add protocol conformances in extensions
+
+## 0.12.0
+
+### Internal Changes
+
+- Migrate to Swift 4.1 and Xcode 9.3
+
+## 0.11.2
+
+### Bug fixes
+
+- Autocases template not respecting type access level
+- Ensure SPM and CocoaPods dependencies match
+- Improve AutoMockable template to handle methods with optional return values
+- Fixed crash while compiling swift templates
+
+## 0.11.1
+
+### Internal changes
+
+- Do not fail the build if slather fails
+- Updated SourceKitten to 0.20.0
+
+### Bug fixes
+
+- Fixed parsing protocol methods return type (#579)
+
+## 0.11.0
 
 ### New Features
 
@@ -18,6 +63,9 @@
 - Added Closures to AutoMockable
 - You can now link generated files to projects using config file
 - You can now use AutoMockable with annotations
+- Updated to latest version of Stencil (commit 9184720)
+- Added support for annotation namespaces
+- Added `--exclude-sources` and `--exclude-templates` CLI options
 
 ** Breaking **
 
@@ -41,6 +89,7 @@ This is a breaking change for template code like this:
 - `selectorName` for methods without parameters now will not contain `()`
 - `returnTypeName` for initializers will be the type name of defining type, with `?` for failable initializers
 - Improved compile time of AutoHashable template
+- Updated StencilSwiftKit and Stencil to 0.10.1
 
 ### Bug fixes 
 
@@ -56,7 +105,13 @@ This is a breaking change for template code like this:
 - Fixed trying to process files which do not exist
 - Automockable will not generate mocks for methods defined in protocol extensions
 - Fixed parsing typealiases of generic types
+- AutoLenses template will create lenses only for stored properties
 - Fixed resolving actual type name for generics with inner types
+- Fixed parsing nested types from extensions
+- Fixed removing back ticks in types names
+- Fixed creating output folder if it does not exist
+- Fixed inferring variable types with closures and improved inferring types of enum default values
+- Fixed enum cases with empty parenthesis not having () associated value
 
 ## 0.10.1
 

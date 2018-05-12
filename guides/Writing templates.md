@@ -56,7 +56,7 @@ Sourcery treat all the templates as independent and so will generate files based
 Swift templates syntax is very similar to EJS:
 
 - Control flow with `<% %>`
-- Output value withn `<%= %>`
+- Output value with `<%= %>`
 - Trim extra new line after control flow tag with `-%>`
 - Trim _all_ whitespaces before/after control flow tag with `<%_` and `_%>`
 - Use `<%# %>` for comments
@@ -116,6 +116,13 @@ To attribute any declaration in the file use `sourcery:file` at the top of the f
   var firstVariable: Int
   var secondVariable: Int
 ```
+To group annotations of the same domain you can use annotation namespcases:
+
+```swift
+// sourcery:decoding: key="first", default=0
+  var firstVariable: Int
+```
+This will effectively annotate with `decoding.key` and `decoding.default` annotations
 
 #### Rules:
 
